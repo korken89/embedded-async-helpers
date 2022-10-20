@@ -1,0 +1,17 @@
+[package]
+authors = ["Emil Fresk <emil.fresk@gmail.com>"]
+name = "embedded-async-helpers"
+version = "0.1.0"
+edition = "2021"
+categories = ["data-structures", "no-std"]
+description = "`static` friendly helpers for async on embedded"
+keywords = ["static", "no-heap"]
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+critical-section = "1"
+atomic-polyfill = "1"
+
+[dependencies.defmt]
+version = "0.3"
+# optional = true # TODO: Make optional
