@@ -289,7 +289,7 @@ impl<'a, T> Drop for FairShareAccessFuture<'a, T> {
                 // TODO: Test this, see if we need to fix indexes somehow
                 if let Some(head_idx) = fs.queue.pop_idx(place) {
                     defmt::debug!("Removing removed head = {}", head_idx.0);
-                    fs.idx_out = head_idx;
+                    // fs.idx_out = head_idx;
                 }
             });
         }
