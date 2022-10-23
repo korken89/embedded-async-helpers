@@ -3,7 +3,16 @@
 //! Especially useful for sharing wakers between async HAL drivers and their futures.
 
 use atomic_polyfill::{AtomicBool, Ordering};
-use core::{cell::UnsafeCell, mem::MaybeUninit, ptr};
+use core::{cell::UnsafeCell, mem::MaybeUninit, ptr, task::Waker};
+
+/// Short-hand for a single waker queue.
+pub type WakerQueue = SingleSlotQueue<Waker>;
+
+/// Short-hand for a single waker queue's consumer.
+pub type WakerConsumer = Consumer<'static, Waker>;
+
+/// Short-hand for a single waker queue's producer.
+pub type WakerProducer = Consumer<'static, Waker>;
 
 /// Single slot queue.
 pub struct SingleSlotQueue<T> {
