@@ -262,7 +262,7 @@ impl<T> FairShare<T> {
     pub fn access<'a>(&'a self) -> FairShareAccessFuture<'a, T> {
         FairShareAccessFuture {
             fs: self,
-            node: None,
+            node: UnsafeCell::new(None),
             place: None,
         }
     }
@@ -271,7 +271,7 @@ impl<T> FairShare<T> {
 /// Access future.
 pub struct FairShareAccessFuture<'a, T> {
     fs: &'a FairShare<T>,
-    node: Option<IntrusiveWakerNode>,
+    node: UnsafeCell<Option<IntrusiveWakerNode>>,
     place: Option<FairSharePlace>,
 }
 
@@ -328,6 +328,7 @@ impl<'a, T> Future for FairShareAccessFuture<'a, T> {
                 } else {
                     let node = self
                         .node
+                        .get_mut()
                         .insert(IntrusiveWakerNode::new(cx.waker().clone()));
 
                     // We are not in the queue yet, enqueue our waker
