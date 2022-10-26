@@ -137,24 +137,12 @@ impl IntrusiveSinglyLinkedList {
         None
     }
 
+    #[allow(unused)]
     fn print(&self) {
-        defmt::debug!(
-            "LinkedList (head = {:x}, tail = {:x}):",
-            self.head.map(|v| v.as_ptr() as u32),
-            self.tail.map(|v| v.as_ptr() as u32)
-        );
-
         let mut head = self.head;
 
         while let Some(h) = head {
             let h2 = unsafe { h.as_ref() };
-
-            defmt::debug!(
-                "    {} ({:x}): next = {:x}",
-                h2.place.0,
-                h.as_ptr() as u32,
-                h2.next.map(|v| v.as_ptr() as u32)
-            );
 
             head = h2.next;
         }
@@ -163,46 +151,27 @@ impl IntrusiveSinglyLinkedList {
 
 impl FairShareManagement {
     fn enqueue(&mut self, node: &mut IntrusiveWakerNode) -> FairSharePlace {
-        defmt::debug!("    running enqueue (pre)");
-        self.queue.print();
-
         let current = self.idx_in;
         self.idx_in = FairSharePlace(current.0.wrapping_add(1));
 
         node.place = current;
 
-        defmt::debug!("Enqueueing waker at place {}", current.0);
-
         self.queue.push_back(node.into());
-
-        defmt::debug!("    running enqueue (post)");
-        self.queue.print();
 
         current
     }
 
     fn dequeue(&mut self) {
-        defmt::debug!("    running dequeue (pre)");
-        self.queue.print();
-
-        if let Some(node) = self.queue.pop_head() {
-            let node = unsafe { node.as_ref() };
-            defmt::debug!("    running dequeue place = {}", node.place.0);
-        }
-
-        defmt::debug!("    running dequeue (post)");
-        self.queue.print();
+        self.queue.pop_head();
     }
 
     fn wake_next_in_queue(&mut self) -> Option<Waker> {
         if let Some(node) = self.queue.peek() {
-            defmt::debug!("Waking waker at place {}", node.place.0);
             self.idx_out = node.place;
 
             Some(node.waker.clone())
         } else {
             self.idx_out = self.idx_in;
-            defmt::debug!("Waking no waker");
 
             None
         }
@@ -214,12 +183,8 @@ impl FairShareManagement {
             let current = self.idx_in;
             self.idx_in = FairSharePlace(current.0.wrapping_add(1));
 
-            defmt::debug!("Direct access granted");
-
             true
         } else {
-            defmt::debug!("Direct access denied");
-
             false
         }
     }
@@ -277,20 +242,12 @@ pub struct FairShareAccessFuture<'a, T> {
 
 impl<'a, T> Drop for FairShareAccessFuture<'a, T> {
     fn drop(&mut self) {
-        defmt::warn!("Dropping access future");
         if let Some(place) = self.place {
             critical_section::with(|mut token| {
                 let fs = self.fs.get_management(&mut token);
 
                 // Remove this from the queue
-
-                defmt::debug!("Removing index");
-
-                // TODO: Test this, see if we need to fix indexes somehow
-                if let Some(head_idx) = fs.queue.pop_idx(place) {
-                    defmt::debug!("Removing removed head = {}", head_idx.0);
-                    // fs.idx_out = head_idx;
-                }
+                fs.queue.pop_idx(place);
             });
         }
     }
@@ -302,23 +259,15 @@ impl<'a, T> Future for FairShareAccessFuture<'a, T> {
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         critical_section::with(|mut token| {
             let fs = self.fs.get_management(&mut token);
-            defmt::debug!(
-                "poll place = {}, idx in = {}, idx out = {}",
-                self.place.map(|v| v.0),
-                fs.idx_in.0,
-                fs.idx_out.0
-            );
 
             if let Some(place) = self.place {
                 if fs.idx_out == place {
                     // Our turn
                     fs.dequeue();
-                    defmt::debug!("{}: Exclusive access granted", place.0);
                     self.place = None;
                     Poll::Ready(FairShareExclusiveAccess { fs: self.fs })
                 } else {
                     // Continue waiting
-                    defmt::debug!("{}: Waiting for exclusive access", place.0);
                     Poll::Pending
                 }
             } else {
@@ -334,8 +283,6 @@ impl<'a, T> Future for FairShareAccessFuture<'a, T> {
                     // We are not in the queue yet, enqueue our waker
                     self.place = Some(fs.enqueue(node));
 
-                    // self.place = Some(fs.enqueue());
-                    defmt::debug!("{}: Waiting for exclusive access", self.place.unwrap().0);
                     Poll::Pending
                 }
             }
@@ -376,9 +323,7 @@ impl<T> FairShareExclusiveAccess<'_, T> {
 impl<T> Drop for FairShareExclusiveAccess<'_, T> {
     fn drop(&mut self) {
         let waker = critical_section::with(|mut token| {
-            let fs = self.fs.get_management(&mut token);
-            defmt::debug!("Returning exclusive access");
-            fs.wake_next_in_queue()
+            self.fs.get_management(&mut token).wake_next_in_queue()
         });
 
         // Run the waker outside of the critical section to minimize its size
